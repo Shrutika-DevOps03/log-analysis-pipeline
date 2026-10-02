@@ -42,5 +42,3 @@ You may need to tweak `LOG_PATTERN` in `parse_and_load.py`, since real log forma
 - Swap SQLite for **PostgreSQL** running in Docker
 - Add a small Flask page to view the report in a browser
 
-## For your resume/portfolio
-Push this to GitHub with this README as-is. In interviews: *"I built a pipeline that parses raw Linux server logs, structures them into a SQL database, and flags security/performance issues — the same pattern used in production log monitoring."*
