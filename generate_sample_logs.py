@@ -21,6 +21,11 @@ SUSPICIOUS_IPS = ["203.0.113.9", "198.51.100.23", "192.0.2.77"]
 NORMAL_IPS = ["192.168.1.10", "192.168.1.22", "10.0.0.5", "192.168.1.45"]
 USERS = ["admin", "root", "deploy", "ubuntu", "test"]
 
+ADMIN_USERS = ["deploy", "ubuntu"]
+NON_ADMIN_USERS = ["test", "guest", "intern"]
+NORMAL_SUDO_COMMANDS = ["/usr/bin/systemctl restart nginx", "/usr/bin/apt-get update", "/bin/journalctl -xe"]
+SUSPICIOUS_SUDO_COMMANDS = ["/bin/bash", "/bin/su -", "/usr/bin/passwd root", "/usr/sbin/visudo"]
+
 
 def ssh_failed(ip, user, pid):
     port = random.randint(30000, 60000)
@@ -30,6 +35,19 @@ def ssh_failed(ip, user, pid):
 def ssh_success(ip, user, pid):
     port = random.randint(30000, 60000)
     return f"sshd[{pid}]: Accepted password for {user} from {ip} port {port} ssh2"
+
+
+def sudo_command(pid):
+    # most sudo use is routine admin work; occasionally simulate a
+    # non-admin user attempting to escalate privileges
+    if random.random() < 0.3:
+        user = random.choice(NON_ADMIN_USERS)
+        command = random.choice(SUSPICIOUS_SUDO_COMMANDS)
+    else:
+        user = random.choice(ADMIN_USERS)
+        command = random.choice(NORMAL_SUDO_COMMANDS)
+    tty = f"pts/{random.randint(0, 3)}"
+    return f"sudo[{pid}]: {user} : TTY={tty} ; PWD=/home/{user} ; USER=root ; COMMAND={command}"
 
 
 def cron_job(pid):
@@ -70,16 +88,18 @@ def generate_logs(num_entries=400, out_path="logs/server.log"):
         timestamp = start_time + timedelta(minutes=random.randint(0, 6 * 24 * 60))
 
         roll = random.random()
-        if roll < 0.15:
+        if roll < 0.14:
             # simulated brute-force bursts from suspicious IPs
             msg = ssh_failed(random.choice(SUSPICIOUS_IPS), random.choice(USERS), pid)
-        elif roll < 0.20:
-            msg = ssh_success(random.choice(NORMAL_IPS), random.choice(["deploy", "ubuntu"]), pid)
-        elif roll < 0.45:
+        elif roll < 0.19:
+            msg = ssh_success(random.choice(NORMAL_IPS), random.choice(ADMIN_USERS), pid)
+        elif roll < 0.26:
+            msg = sudo_command(pid)
+        elif roll < 0.50:
             msg = nginx_request(random.choice(NORMAL_IPS + SUSPICIOUS_IPS))
-        elif roll < 0.65:
+        elif roll < 0.68:
             msg = cron_job(pid)
-        elif roll < 0.80:
+        elif roll < 0.81:
             msg = kernel_warning()
         else:
             msg = disk_warning()

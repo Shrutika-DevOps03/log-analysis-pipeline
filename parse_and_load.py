@@ -18,6 +18,14 @@ LOG_PATTERN = re.compile(
 
 IP_PATTERN = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 
+# Known/authorized admin accounts. In a real environment this would come
+# from your IAM or user-management system, not be guessed from the logs.
+KNOWN_ADMINS = {"deploy", "ubuntu"}
+
+SUSPICIOUS_SUDO_COMMANDS = ["/bin/bash", "/bin/su", "passwd root", "visudo"]
+
+SSH_USER_PATTERN = re.compile(r"for (?:invalid user )?(?P<user>\S+) from")
+
 
 def classify(process, message):
     msg_lower = message.lower()
@@ -25,6 +33,13 @@ def classify(process, message):
         return "ERROR", "failed_login"
     if "accepted password" in msg_lower:
         return "INFO", "successful_login"
+    if process == "sudo":
+        sudo_user = message.split(" :")[0].strip()
+        if sudo_user not in KNOWN_ADMINS:
+            return "ERROR", "privilege_escalation"
+        if any(cmd in message for cmd in SUSPICIOUS_SUDO_COMMANDS):
+            return "WARNING", "sudo_shell_access"
+        return "INFO", "sudo_command"
     if "warning" in msg_lower or "out of memory" in msg_lower:
         return "WARNING", "system_warning"
     if process == "nginx":
@@ -38,6 +53,13 @@ def classify(process, message):
     return "INFO", "other"
 
 
+def extract_actor(process, message):
+    if process == "sudo":
+        return message.split(" :")[0].strip()
+    match = SSH_USER_PATTERN.search(message)
+    return match.group("user") if match else None
+
+
 def parse_line(line):
     match = LOG_PATTERN.match(line.strip())
     if not match:
@@ -48,6 +70,7 @@ def parse_line(line):
     data["level"] = level
     data["event_type"] = event_type
     data["source_ip"] = ip_match.group(0) if ip_match else None
+    data["actor_user"] = extract_actor(data["process"], data["message"])
     return data
 
 
@@ -62,6 +85,7 @@ def create_table(conn):
             level TEXT,
             event_type TEXT,
             source_ip TEXT,
+            actor_user TEXT,
             message TEXT
         )
     """)
@@ -82,14 +106,14 @@ def load_logs(log_path="logs/server.log", db_path="logs.db"):
                 rows.append((
                     parsed["timestamp"], parsed["host"], parsed["process"],
                     parsed["pid"], parsed["level"], parsed["event_type"],
-                    parsed["source_ip"], parsed["message"],
+                    parsed["source_ip"], parsed["actor_user"], parsed["message"],
                 ))
             else:
                 skipped += 1
 
     conn.executemany(
-        """INSERT INTO logs (timestamp, host, process, pid, level, event_type, source_ip, message)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO logs (timestamp, host, process, pid, level, event_type, source_ip, actor_user, message)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         rows,
     )
     conn.commit()

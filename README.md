@@ -3,9 +3,12 @@
 A beginner-friendly project showing the full pipeline: **Linux logs → Python parsing → SQL storage → SQL analysis**.
 
 ## What it does
-1. `generate_sample_logs.py` creates a realistic Linux-style log file (SSH logins, nginx requests, cron jobs, kernel/disk warnings) — including a simulated brute-force SSH attack.
-2. `parse_and_load.py` reads the log file, extracts fields (timestamp, process, level, event type, source IP) with regex, and loads them into a SQLite database.
-3. `analyze.py` runs SQL queries to produce a report: event counts by level/type, top offending IPs, HTTP error counts, and a brute-force alert.
+1. `generate_sample_logs.py` creates a realistic Linux-style log file (SSH logins, sudo/privilege escalation attempts, nginx requests, cron jobs, kernel/disk warnings) — including a simulated brute-force SSH attack and non-admin users attempting `sudo`.
+2. `parse_and_load.py` reads the log file, extracts fields (timestamp, process, level, event type, source IP, acting user) with regex, and loads them into a SQLite database.
+3. `analyze.py` runs SQL queries to produce a report: event counts by level/type, top offending IPs, privilege escalation attempts, HTTP error counts, and a brute-force alert.
+
+### Privilege escalation detection
+`parse_and_load.py` keeps a `KNOWN_ADMINS` allowlist (currently `deploy`, `ubuntu`). Any `sudo` use by a user **not** on that list is flagged as `privilege_escalation`. On a real server, edit that set to match your actual authorized admins — this mirrors how a real monitoring setup would check sudo activity against your IAM/user list, not guess from the logs themselves.
 
 ## Requirements
 Python 3.8+. No external packages — `re`, `sqlite3`, `datetime`, and `random` are all in the standard library, so there's nothing to `pip install`.

@@ -42,6 +42,20 @@ def run_report():
         flag = "  <-- possible brute force" if count >= 10 else ""
         print(f"{ip:18} {count} failed attempts{flag}")
 
+    print("\n-- Privilege escalation attempts (sudo by non-admin users) --")
+    rows = cur.execute("""
+        SELECT actor_user, COUNT(*) as attempts
+        FROM logs
+        WHERE event_type = 'privilege_escalation'
+        GROUP BY actor_user
+        ORDER BY attempts DESC
+    """).fetchall()
+    if rows:
+        for user, count in rows:
+            print(f"{user:15} {count} sudo attempt(s)  <-- NOT an authorized admin")
+    else:
+        print("None detected.")
+
     print("\n-- HTTP server errors --")
     cur.execute("""
         SELECT COUNT(*) FROM logs
